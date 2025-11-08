@@ -1,174 +1,183 @@
 import numpy as np
 import matplotlib.pyplot as plt
-from ipywidgets import widgets
-from IPython.display import YouTubeVideo
-from IPython.display import IFrame
-from IPython.display import display
+import ipywidgets as ipw
+from IPython.display import YouTubeVideo, IFrame, display
 import logging
+
 logging.getLogger('matplotlib.font_manager').disabled = True
 
-import ipywidgets as widgets
 %config InlineBackend.figure_format = 'retina'
+
 plt.style.use("https://raw.githubusercontent.com/NeuromatchAcademy/course-content/main/nma.mplstyle")
-my_layout = widgets.Layout()
 
-def plot_volt_trace(pars, v, sp):
-  V_th = pars['V_th']
-  dt, range_t = pars['dt'], pars['range_t']
-  if sp.size:
-    sp_num = (sp / dt).astype(int) - 1
-    v[sp_num] += 20  # draw nicer spikes
+layout = ipw.Layout()
 
-  plt.plot(pars['range_t'], v, 'b')
-  plt.axhline(V_th, 0, 1, color='k', ls='--')
-  plt.xlabel('Time (ms)')
-  plt.ylabel('V (mV)')
-  plt.legend(['Membrane\npotential', r'Threshold V$_{\mathrm{th}}$'],
-             loc=[1.05, 0.75])
-  plt.ylim([-80, -40])
-  plt.show()
+def visualize_membrane_potential(params, membrane_voltage, spike_times):
+    threshold = params['V_th']
+    time_step, time_array = params['dt'], params['range_t']
+    
+    if len(spike_times) > 0:
+        spike_indices = (spike_times / time_step).astype(int) - 1
+        membrane_voltage[spike_indices] += 20  # Enhance spike visibility
+    
+    plt.plot(time_array, membrane_voltage, color='blue')
+    plt.axhline(y=threshold, xmin=0, xmax=1, color='black', linestyle='--')
+    plt.xlabel('Time (ms)')
+    plt.ylabel('Membrane Potential (mV)')
+    plt.legend(['Membrane\nPotential', r'Threshold $V_{th}$'], loc=[1.05, 0.75])
+    plt.ylim([-80, -40])
+    plt.show()
 
-def plot_GWN(pars, I_GWN):
-  plt.figure(figsize=(12, 4))
-  plt.subplot(121)
-  plt.plot(pars['range_t'][::3], I_GWN[::3], 'b')
-  plt.xlabel('Time (ms)')
-  plt.ylabel(r'$I_{GWN}$ (pA)')
-  plt.subplot(122)
-  plot_volt_trace(pars, v, sp)
-  plt.tight_layout()
-  plt.show()
+def plot_noise_current(params, noise_current, membrane_voltage=None, spike_times=None):
+    fig, axes = plt.subplots(1, 2, figsize=(12, 4))
+    
+    axes[0].plot(params['range_t'][::3], noise_current[::3], color='blue')
+    axes[0].set_xlabel('Time (ms)')
+    axes[0].set_ylabel(r'$I_{GWN}$ (pA)')
+    
+    if membrane_voltage is not None and spike_times is not None:
+        visualize_membrane_potential(params, membrane_voltage, spike_times)
+    else:
+        axes[1].remove() 
+    
+    plt.tight_layout()
+    plt.show()
 
-def my_hists(isi1, isi2, cv1, cv2, sigma1, sigma2):
-  plt.figure(figsize=(11, 4))
-  my_bins = np.linspace(10, 30, 20)
-  plt.subplot(121)
-  plt.hist(isi1, bins=my_bins, color='b', alpha=0.5)
-  plt.xlabel('ISI (ms)')
-  plt.ylabel('count')
-  plt.title(r'$\sigma_{GWN}=$%.1f, CV$_{\mathrm{isi}}$=%.3f' % (sigma1, cv1))
-  plt.subplot(122)
-  plt.hist(isi2, bins=my_bins, color='b', alpha=0.5)
-  plt.xlabel('ISI (ms)')
-  plt.ylabel('count')
-  plt.title(r'$\sigma_{GWN}=$%.1f, CV$_{\mathrm{isi}}$=%.3f' % (sigma2, cv2))
-  plt.tight_layout()
-  plt.show()
+def plot_isi_histograms(intervals1, intervals2, cv1, cv2, noise_std1, noise_std2):
+    fig, axes = plt.subplots(1, 2, figsize=(11, 4))
+    bin_edges = np.linspace(10, 30, 20)
+    
+    axes[0].hist(intervals1, bins=bin_edges, color='blue', alpha=0.5)
+    axes[0].set_xlabel('ISI (ms)')
+    axes[0].set_ylabel('Count')
+    axes[0].set_title(r'$\sigma_{GWN}=%.1f$, CV$_{\mathrm{isi}}=%.3f$' % (noise_std1, cv1))
+    
+    axes[1].hist(intervals2, bins=bin_edges, color='blue', alpha=0.5)
+    axes[1].set_xlabel('ISI (ms)')
+    axes[1].set_ylabel('Count')
+    axes[1].set_title(r'$\sigma_{GWN}=%.1f$, CV$_{\mathrm{isi}}=%.3f$' % (noise_std2, cv2))
+    
+    plt.tight_layout()
+    plt.show()
 
-class PlayVideo(IFrame):
-  def __init__(self, id, source, page=1, width=400, height=300, **kwargs):
-    self.id = id
-    if source == 'Bilibili':
-      src = f'https://player.bilibili.com/player.html?bvid={id}&page={page}'
-    elif source == 'Osf':
-      src = f'https://mfr.ca-1.osf.io/render?url=https://osf.io/download/{id}/?direct%26mode=render'
-    super(PlayVideo, self).__init__(src, width, height, **kwargs)
+class VideoPlayer(IFrame):
+    def __init__(self, video_id, platform, page=1, width=400, height=300, **kwargs):
+        self.video_id = video_id
+        if platform == 'Bilibili':
+            src_url = f'https://player.bilibili.com/player.html?bvid={video_id}&page={page}'
+        elif platform == 'Osf':
+            src_url = f'https://mfr.ca-1.osf.io/render?url=https://osf.io/download/{video_id}/?direct%26mode=render'
+        else:
+            raise ValueError(f"Unsupported platform: {platform}")
+        super().__init__(src_url, width=width, height=height, **kwargs)
 
+def show_videos(video_list, width=400, height=300, fullscreen=False):
+    tab_widgets = []
+    for idx, (platform, vid_id) in enumerate(video_list):
+        output_widget = ipw.Output()
+        with output_widget:
+            if platform == 'Youtube':
+                player = YouTubeVideo(id=vid_id, width=width, height=height, fs=fullscreen, rel=0)
+                print(f'Video available at https://youtube.com/watch?v={player.id}')
+            else:
+                player = VideoPlayer(id=vid_id, platform=platform, width=width, height=height, fs=fullscreen, autoplay=False)
+                if platform == 'Bilibili':
+                    print(f'Video available at https://www.bilibili.com/video/{player.video_id}')
+                elif platform == 'Osf':
+                    print(f'Video available at https://osf.io/{player.video_id}')
+            display(player)
+        tab_widgets.append(output_widget)
+    return tab_widgets
 
-def display_videos(video_ids, W=400, H=300, fs=1):
-  tab_contents = []
-  for i, video_id in enumerate(video_ids):
-    out = widgets.Output()
-    with out:
-      if video_ids[i][0] == 'Youtube':
-        video = YouTubeVideo(id=video_ids[i][1], width=W, height=H, fs=fs, rel=0)
-        print(f'Video available at https://youtube.com/watch?v={video.id}')
-      else:
-        video = PlayVideo(id=video_ids[i][1], source=video_ids[i][0], width=W, height=H, fs=fs, autoplay=False)
-        if video_ids[i][0] == 'Bilibili':
-          print(f'Video available at https://www.bilibili.com/video/{video.id}')
-        elif video_ids[i][0] == 'Osf':
-          print(f'Video available at https://osf.io/{video.id}')
-      display(video)
-    tab_contents.append(out)
-  return tab_contents
+def get_default_parameters(**overrides):
+    params = {
+        'V_th': -55.,      # Spike threshold [mV]
+        'V_reset': -75.,   # Reset potential [mV]
+        'tau_m': 10.,      # Membrane time constant [ms]
+        'g_L': 10.,        # Leak conductance [nS]
+        'V_init': -75.,    # Initial potential [mV]
+        'E_L': -75.,       # Leak reversal potential [mV]
+        'tref': 2.,        # Refractory period [ms]
+        'T': 400.,         # Simulation duration [ms]
+        'dt': 0.1          # Time step [ms]
+    }
+    
+    for key, value in overrides.items():
+        params[key] = value
+    
+    params['range_t'] = np.arange(0, params['T'], params['dt'])
+    return params
 
-def default_pars(**kwargs):
-  pars = {}
-  pars['V_th'] = -55.     # spike threshold [mV]
-  pars['V_reset'] = -75.  # reset potential [mV]
-  pars['tau_m'] = 10.     # membrane time constant [ms]
-  pars['g_L'] = 10.       # leak conductance [nS]
-  pars['V_init'] = -75.   # initial potential [mV]
-  pars['E_L'] = -75.      # leak reversal potential [mV]
-  pars['tref'] = 2.       # refractory time (ms)
-  pars['T'] = 400.  # Total duration of simulation [ms]
-  pars['dt'] = .1   # Simulation time step [ms]
-  for k in kwargs:
-    pars[k] = kwargs[k]
-  pars['range_t'] = np.arange(0, pars['T'], pars['dt'])  # Vector of discretized time points [ms]
-  return pars
+def simulate_lif_neuron(params, input_current, halt_simulation=False):
+    threshold, reset = params['V_th'], params['V_reset']
+    time_const, leak_cond = params['tau_m'], params['g_L']
+    init_volt, leak_rev = params['V_init'], params['E_L']
+    time_step, time_vec = params['dt'], params['range_t']
+    total_steps = len(time_vec)
+    ref_period = params['tref']
+    
+    voltage = np.zeros(total_steps)
+    voltage[0] = init_volt
+    
+    if np.isscalar(input_current):
+        input_current = np.full(total_steps, input_current)
+    
+    if halt_simulation:
+        half_point = total_steps // 2
+        input_current[:half_point - 1000] = 0
+        input_current[half_point + 1000:] = 0
+    
+    spike_list = []
+    ref_counter = 0.0 
+    
+    for step in range(total_steps - 1):
+        if ref_counter > 0:  
+            voltage[step] = reset
+            ref_counter -= 1
+        elif voltage[step] >= threshold: 
+            spike_list.append(step)
+            voltage[step] = reset
+            ref_counter = ref_period / time_step
+        else:
+            voltage_change = (-(voltage[step] - leak_rev) + input_current[step] / leak_cond) * (time_step / time_const)
+            voltage[step + 1] = voltage[step] + voltage_change
+    
+    spike_times = np.array(spike_list) * time_step
+    return voltage, spike_times
 
-def run_LIF(pars, Iinj, stop=False):
-  # Set parameters
-  V_th, V_reset = pars['V_th'], pars['V_reset']
-  tau_m, g_L = pars['tau_m'], pars['g_L']
-  V_init, E_L = pars['V_init'], pars['E_L']
-  dt, range_t = pars['dt'], pars['range_t']
-  Lt = range_t.size
-  tref = pars['tref']
+def generate_gaussian_noise(params, mean_current, std_dev, fixed_seed=None):
+    time_step, time_vec = params['dt'], params['range_t']
+    num_steps = len(time_vec)
+    
+    if fixed_seed is not None:
+        np.random.seed(fixed_seed)
+    else:
+        np.random.seed()
+    
+    noise = mean_current + std_dev * np.random.randn(num_steps) / np.sqrt(time_step / 1000.0)
+    return noise
 
-  v = np.zeros(Lt)
-  v[0] = V_init
-
-  Iinj = Iinj * np.ones(Lt)
-  
-  if stop:
-    Iinj[:int(len(Iinj) / 2) - 1000] = 0
-    Iinj[int(len(Iinj) / 2) + 1000:] = 0
-
-  rec_spikes = []  # record spike times
-  tr = 0.  # the count for refractory duration
-
-  for it in range(Lt - 1):
-    if tr > 0:  # check if in refractory period
-      v[it] = V_reset  # set voltage to reset
-      tr = tr - 1 # reduce running counter of refractory period
-    elif v[it] >= V_th:  # if voltage over threshold
-      rec_spikes.append(it)  # record spike event
-      v[it] = V_reset  # reset voltage
-      tr = tref / dt  # set refractory time
-    dv = (-(v[it] - E_L) + Iinj[it] / g_L) * (dt / tau_m)
-    v[it + 1] = v[it] + dv
-  rec_spikes = np.array(rec_spikes) * dt
-  return v, rec_spikes
-
-def my_GWN(pars, mu, sig, myseed=False):
-  # Retrieve simulation parameters
-  dt, range_t = pars['dt'], pars['range_t']
-  Lt = range_t.size
-  # Set random seed
-  if myseed:
-      np.random.seed(seed=myseed)
-  else:
-      np.random.seed()
-  # Generate GWN
-  I_gwn = mu + sig * np.random.randn(Lt) / np.sqrt(dt / 1000.)
-  return I_gwn
-
-# Neuron response with constant DC input
+# Example: Neuron response to constant DC input 
 """
-def diff_DC(I_dc=200., tau_m=10.):
-  pars = default_pars(T=100.)
-  pars['tau_m'] = tau_m
-  v, sp = run_LIF(pars, Iinj=I_dc)
-  plot_volt_trace(pars, v, sp)
-  plt.show()
+def simulate_dc_response(dc_current=200., membrane_tau=10.):
+    params = get_default_parameters(T=100.)
+    params['tau_m'] = membrane_tau
+    voltage, spikes = simulate_lif_neuron(params, input_current=dc_current)
+    visualize_membrane_potential(params, voltage, spikes)
+    plt.show()
 """
 
-# Neuron response with Gaussian white noise (GWN) current
+# Example: Neuron response to Gaussian white noise 
 """
-def diff_GWN_to_LIF(mu_gwn, sig_gwn):
-  pars = default_pars(T=100.)
-  I_GWN = my_GWN(pars, mu=mu_gwn, sig=sig_gwn)
-  v, sp = run_LIF(pars, Iinj=I_GWN)
-  plt.figure(figsize=(12, 4))
-  plt.subplot(121)
-  plt.plot(pars['range_t'][::3], I_GWN[::3], 'b')
-  plt.xlabel('Time (ms)')
-  plt.ylabel(r'$I_{GWN}$ (pA)')
-  plt.subplot(122)
-  plot_volt_trace(pars, v, sp)
-  plt.tight_layout()
-  plt.show()
+def simulate_gwn_response(mean_gwn, std_gwn):
+    params = get_default_parameters(T=100.)
+    gwn_current = generate_gaussian_noise(params, mean=mean_gwn, std_dev=std_gwn)
+    voltage, spikes = simulate_lif_neuron(params, input_current=gwn_current)
+    fig, axes = plt.subplots(1, 2, figsize=(12, 4))
+    axes[0].plot(params['range_t'][::3], gwn_current[::3], color='blue')
+    axes[0].set_xlabel('Time (ms)')
+    axes[0].set_ylabel(r'$I_{GWN}$ (pA)')
+    visualize_membrane_potential(params, voltage, spikes)
+    plt.tight_layout()
+    plt.show()
 """
