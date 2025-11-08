@@ -1,259 +1,262 @@
-import matplotlib.pyplot as plt
 import numpy as np
+import matplotlib.pyplot as plt
 import scipy.optimize as opt
 import logging
-from ipywidgets import widgets
-from IPython.display import YouTubeVideo
-from IPython.display import IFrame
-from IPython.display import display
+import ipywidgets as ipw
+from IPython.display import YouTubeVideo, IFrame, display
+
+# Suppress font manager warnings
 logging.getLogger('matplotlib.font_manager').disabled = True
-import ipywidgets as widgets  # interactive display
+
+# Configure high-DPI inline plots
 %config InlineBackend.figure_format = 'retina'
+
+# Apply custom matplotlib style
 plt.style.use("https://raw.githubusercontent.com/NeuromatchAcademy/course-content/main/nma.mplstyle")
 
-# @title Plotting Functions
+# Plotting Functions
+def visualize_inverse_transfer(input_range, gain, threshold):
+    fig, ax = plt.subplots()
+    ax.plot(input_range, inverse_transfer(input_range, gain=gain, threshold=threshold))
+    ax.set(xlabel="$x$", ylabel="$F^{-1}(x)$")
 
-def plot_FI_inverse(x, a, theta):
-  f, ax = plt.subplots()
-  ax.plot(x, F_inv(x, a=a, theta=theta))
-  ax.set(xlabel="$x$", ylabel="$F^{-1}(x)$")
+def visualize_ei_curves(input_range, exc_curve, inh_curve):
+    plt.figure()
+    plt.plot(input_range, exc_curve, color='blue', label='Excitatory Population')
+    plt.plot(input_range, inh_curve, color='red', label='Inhibitory Population')
+    plt.legend(loc='lower right')
+    plt.xlabel('Input (a.u.)')
+    plt.ylabel('F(Input)')
+    plt.show()
 
+def compare_populations(time_vec, exc1, inh1, exc2, inh2):
+    fig, axes = plt.subplots(2, 1, figsize=(8, 6))
+    axes[0].plot(time_vec, exc1, color='blue', label='Excitatory')
+    axes[0].plot(time_vec, inh1, color='red', label='Inhibitory')
+    axes[0].set_ylabel('Activity')
+    axes[0].legend(loc='best')
+    
+    axes[1].plot(time_vec, exc2, color='blue', label='Excitatory')
+    axes[1].plot(time_vec, inh2, color='red', label='Inhibitory')
+    axes[1].set_xlabel('Time (ms)')
+    axes[1].set_ylabel('Activity')
+    axes[1].legend(loc='best')
+    plt.tight_layout()
+    plt.show()
 
-def plot_FI_EI(x, FI_exc, FI_inh):
-  plt.figure()
-  plt.plot(x, FI_exc, 'b', label='E population')
-  plt.plot(x, FI_inh, 'r', label='I population')
-  plt.legend(loc='lower right')
-  plt.xlabel('x (a.u.)')
-  plt.ylabel('F(x)')
-  plt.show()
+def visualize_nullclines(exc_null_exc, exc_null_inh, inh_null_exc, inh_null_inh):
+    plt.figure()
+    plt.plot(exc_null_exc, exc_null_inh, color='blue', label='E Nullcline')
+    plt.plot(inh_null_exc, inh_null_inh, color='red', label='I Nullcline')
+    plt.xlabel(r'$r_E$')
+    plt.ylabel(r'$r_I$')
+    plt.legend(loc='best')
+    plt.show()
 
+def generate_nullcline_plot(params):
+    exc_range = np.linspace(-0.01, 0.96, 100)
+    inh_range = np.linspace(-0.01, 0.8, 100)
+    
+    exc_null_inh = compute_e_nullcline(exc_range, **params)
+    inh_null_exc = compute_i_nullcline(inh_range, **params)
+    
+    plt.figure()
+    plt.plot(exc_range, exc_null_inh, color='blue', label='E Nullcline')
+    plt.plot(inh_null_exc, inh_range, color='red', label='I Nullcline')
+    plt.xlabel(r'$r_E$')
+    plt.ylabel(r'$r_I$')
+    plt.legend(loc='best')
+    plt.show()
 
-def my_test_plot(t, rE1, rI1, rE2, rI2):
-  plt.figure()
-  ax1 = plt.subplot(211)
-  ax1.plot(pars['range_t'], rE1, 'b', label='E population')
-  ax1.plot(pars['range_t'], rI1, 'r', label='I population')
-  ax1.set_ylabel('Activity')
-  ax1.legend(loc='best')
-  ax2 = plt.subplot(212, sharex=ax1, sharey=ax1)
-  ax2.plot(pars['range_t'], rE2, 'b', label='E population')
-  ax2.plot(pars['range_t'], rI2, 'r', label='I population')
-  ax2.set_xlabel('t (ms)')
-  ax2.set_ylabel('Activity')
-  ax2.legend(loc='best')
-  
+def add_vector_field(params, skip_factor=2, vector_scale=5):
+    grid_vals = np.linspace(0., 1., 20)
+    exc_grid, inh_grid = np.meshgrid(grid_vals, grid_vals)
+    
+    d_exc_dt, d_inh_dt = compute_ei_derivatives(exc_grid, inh_grid, **params)
+    
+    plt.quiver(exc_grid[::skip_factor, ::skip_factor], inh_grid[::skip_factor, ::skip_factor],
+               d_exc_dt[::skip_factor, ::skip_factor], d_inh_dt[::skip_factor, ::skip_factor],
+               angles='xy', scale_units='xy', scale=vector_scale, facecolor='cyan')
+    plt.xlabel(r'$r_E$')
+    plt.ylabel(r'$r_I$')
 
-def plot_nullclines(Exc_null_rE, Exc_null_rI, Inh_null_rE, Inh_null_rI):
-  plt.figure()
-  plt.plot(Exc_null_rE, Exc_null_rI, 'b', label='E nullcline')
-  plt.plot(Inh_null_rE, Inh_null_rI, 'r', label='I nullcline')
-  plt.xlabel(r'$r_E$')
-  plt.ylabel(r'$r_I$')
-  plt.legend(loc='best')
-  plt.show()
+def plot_single_trajectory(params, trajectory_color, initial_state, trajectory_label):
+    temp_params = params.copy()
+    temp_params['rE_init'] = initial_state[0]
+    temp_params['rI_init'] = initial_state[1]
+    
+    exc_traj, inh_traj = simulate_ei_network(**temp_params)
+    
+    plt.plot(exc_traj, inh_traj, color=trajectory_color, label=trajectory_label)
+    plt.plot(initial_state[0], initial_state[1], marker='o', color=trajectory_color, markersize=8)
+    plt.xlabel(r'$r_E$')
+    plt.ylabel(r'$r_I$')
 
+def plot_multiple_trajectories(params, step_size, num_steps, label_text):
+    temp_params = params.copy()
+    for i in range(num_steps):
+        for j in range(num_steps):
+            temp_params['rE_init'] = step_size * i
+            temp_params['rI_init'] = step_size * j
+            exc_traj, inh_traj = simulate_ei_network(**temp_params)
+            if i == num_steps - 1 and j == num_steps - 1:
+                plt.plot(exc_traj, inh_traj, color='gray', alpha=0.8, label=label_text)
+            else:
+                plt.plot(exc_traj, inh_traj, color='gray', alpha=0.8)
+    plt.xlabel(r'$r_E$')
+    plt.ylabel(r'$r_I$')
 
-def my_plot_nullcline(pars):
-  Exc_null_rE = np.linspace(-0.01, 0.96, 100)
-  Exc_null_rI = get_E_nullcline(Exc_null_rE, **pars)
-  Inh_null_rI = np.linspace(-.01, 0.8, 100)
-  Inh_null_rE = get_I_nullcline(Inh_null_rI, **pars)
-  plt.plot(Exc_null_rE, Exc_null_rI, 'b', label='E nullcline')
-  plt.plot(Inh_null_rE, Inh_null_rI, 'r', label='I nullcline')
-  plt.xlabel(r'$r_E$')
-  plt.ylabel(r'$r_I$')
-  plt.legend(loc='best')
+def full_phase_portrait(params):
+    plt.figure(figsize=(7.7, 6))
+    plot_multiple_trajectories(params, 0.2, 6, 'Sample Trajectories\nfor Different Initial Conditions')
+    plot_single_trajectory(params, 'orange', [0.6, 0.8], 'Sample Trajectory for\nLow Activity')
+    plot_single_trajectory(params, 'magenta', [0.6, 0.6], 'Sample Trajectory for\nHigh Activity')
+    generate_nullcline_plot(params)
+    add_vector_field(params)
+    plt.legend(loc=[1.02, 0.57], handlelength=1)
 
+def mark_fixed_point(fixed_point, offset=(0.02, 0.1), angle=0):
+    plt.plot(fixed_point[0], fixed_point[1], marker='o', color='black', markersize=8)
+    plt.text(fixed_point[0] + offset[0], fixed_point[1] + offset[1],
+             f'Fixed Point = \n({fixed_point[0]:.3f}, {fixed_point[1]:.3f})',
+             horizontalalignment='center', verticalalignment='bottom', rotation=angle)
 
-def my_plot_vector(pars, my_n_skip=2, myscale=5):
-  EI_grid = np.linspace(0., 1., 20)
-  rE, rI = np.meshgrid(EI_grid, EI_grid)
-  drEdt, drIdt = EIderivs(rE, rI, **pars)
-  n_skip = my_n_skip
-  plt.quiver(rE[::n_skip, ::n_skip], rI[::n_skip, ::n_skip],
-             drEdt[::n_skip, ::n_skip], drIdt[::n_skip, ::n_skip],
-             angles='xy', scale_units='xy', scale=myscale, facecolor='c')
-  plt.xlabel(r'$r_E$')
-  plt.ylabel(r'$r_I$')
+def get_standard_parameters(**overrides):
+    params = {
+        'tau_E': 1.0,         # E time constant [ms]
+        'a_E': 1.2,           # E gain
+        'theta_E': 2.8,       # E threshold
+        'tau_I': 2.0,         # I time constant [ms]
+        'a_I': 1.0,           # I gain
+        'theta_I': 4.0,       # I threshold
+        'wEE': 9.0,           # E to E weight
+        'wEI': 4.0,           # I to E weight
+        'wIE': 13.0,          # E to I weight
+        'wII': 11.0,          # I to I weight
+        'I_ext_E': 0.0,       # External input to E
+        'I_ext_I': 0.0,       # External input to I
+        'T': 50.0,            # Simulation duration [ms]
+        'dt': 0.1,            # Time step [ms]
+        'rE_init': 0.2,       # Initial E rate
+        'rI_init': 0.2        # Initial I rate
+    }
+    
+    for key, val in overrides.items():
+        params[key] = val
+    
+    params['time_vec'] = np.arange(0, params['T'], params['dt'])
+    return params
 
+def sigmoid_activation(input_val, gain, threshold):
+    return 1 / (1 + np.exp(-gain * (input_val - threshold))) - 1 / (1 + np.exp(gain * threshold))
 
-def my_plot_trajectory(pars, mycolor, x_init, mylabel):
-  pars = pars.copy()
-  pars['rE_init'], pars['rI_init'] = x_init[0], x_init[1]
-  rE_tj, rI_tj = simulate_wc(**pars)
-  plt.plot(rE_tj, rI_tj, color=mycolor, label=mylabel)
-  plt.plot(x_init[0], x_init[1], 'o', color=mycolor, ms=8)
-  plt.xlabel(r'$r_E$')
-  plt.ylabel(r'$r_I$')
+def sigmoid_derivative(input_val, gain, threshold):
+    exp_term = np.exp(-gain * (input_val - threshold))
+    return gain * exp_term / (1 + exp_term)**2
 
+class VideoPlayer(IFrame):
+    def __init__(self, video_id, platform, page=1, width=400, height=300, **kwargs):
+        self.video_id = video_id
+        if platform == 'Bilibili':
+            embed_src = f'https://player.bilibili.com/player.html?bvid={video_id}&page={page}'
+        elif platform == 'Osf':
+            embed_src = f'https://mfr.ca-1.osf.io/render?url=https://osf.io/download/{video_id}/?direct%26mode=render'
+        super().__init__(embed_src, width=width, height=height, **kwargs)
 
-def my_plot_trajectories(pars, dx, n, mylabel):
-  pars = pars.copy()
-  for ie in range(n):
-    for ii in range(n):
-      pars['rE_init'], pars['rI_init'] = dx * ie, dx * ii
-      rE_tj, rI_tj = simulate_wc(**pars)
-      if (ie == n-1) & (ii == n-1):
-          plt.plot(rE_tj, rI_tj, 'gray', alpha=0.8, label=mylabel)
-      else:
-          plt.plot(rE_tj, rI_tj, 'gray', alpha=0.8)
-  plt.xlabel(r'$r_E$')
-  plt.ylabel(r'$r_I$')
+def embed_video_collection(video_tuples, width=400, height=300, autoplay_flag=1):
+    tab_outputs = []
+    for idx, (platform, vid_id) in enumerate(video_tuples):
+        output_widget = ipw.Output()
+        with output_widget:
+            if platform == 'Youtube':
+                player = YouTubeVideo(id=vid_id, width=width, height=height, fs=autoplay_flag, rel=0)
+                print(f'Video at https://youtube.com/watch?v={player.id}')
+            else:
+                player = VideoPlayer(id=vid_id, platform=platform, width=width, height=height, fs=autoplay_flag, autoplay=False)
+                if platform == 'Bilibili':
+                    print(f'Video at https://www.bilibili.com/video/{player.video_id}')
+                elif platform == 'Osf':
+                    print(f'Video at https://osf.io/{player.video_id}')
+            display(player)
+        tab_outputs.append(output_widget)
+    return tab_outputs
 
+def simulate_ei_network(tau_e, a_e, theta_e, tau_i, a_i, theta_i, wee, wei, wie, wii, i_ext_e, i_ext_i, r_e_start, r_i_start, dt, time_array, **extra_params):
+    num_timesteps = len(time_array)
+    exc_rates = np.append(r_e_start, np.zeros(num_timesteps - 1))
+    inh_rates = np.append(r_i_start, np.zeros(num_timesteps - 1))
+    ext_e_input = np.full(num_timesteps, i_ext_e)
+    ext_i_input = np.full(num_timesteps, i_ext_i)
+    
+    for timestep in range(num_timesteps - 1):
+        exc_update = (dt / tau_e) * (-exc_rates[timestep] + sigmoid_activation(wee * exc_rates[timestep] - wei * inh_rates[timestep] + ext_e_input[timestep], a_e, theta_e))
+        inh_update = (dt / tau_i) * (-inh_rates[timestep] + sigmoid_activation(wie * exc_rates[timestep] - wii * inh_rates[timestep] + ext_i_input[timestep], a_i, theta_i))
+        exc_rates[timestep + 1] = exc_rates[timestep] + exc_update
+        inh_rates[timestep + 1] = inh_rates[timestep] + inh_update
+    
+    return exc_rates, inh_rates
 
-def plot_complete_analysis(pars):
-  plt.figure(figsize=(7.7, 6.))
-  my_plot_trajectories(pars, 0.2, 6,'Sample trajectories \nfor different init. conditions')
-  my_plot_trajectory(pars, 'orange', [0.6, 0.8],'Sample trajectory for \nlow activity')
-  my_plot_trajectory(pars, 'm', [0.6, 0.6],'Sample trajectory for \nhigh activity')
-  my_plot_nullcline(pars)
-  # plot vector field
-  EI_grid = np.linspace(0., 1., 20)
-  rE, rI = np.meshgrid(EI_grid, EI_grid)
-  drEdt, drIdt = EIderivs(rE, rI, **pars)
-  n_skip = 2
-  plt.quiver(rE[::n_skip, ::n_skip], rI[::n_skip, ::n_skip],
-             drEdt[::n_skip, ::n_skip], drIdt[::n_skip, ::n_skip],
-             angles='xy', scale_units='xy', scale=5., facecolor='c')
-  plt.legend(loc=[1.02, 0.57], handlelength=1)
+def visualize_ei_different_starts(exc_start=0.0):
+    params = get_standard_parameters(rE_init=exc_start, rI_init=0.15)
+    exc_activity, inh_activity = simulate_ei_network(**params)
+    
+    plt.figure()
+    plt.plot(params['time_vec'], exc_activity, color='blue', label='Excitatory Population')
+    plt.plot(params['time_vec'], inh_activity, color='red', label='Inhibitory Population')
+    plt.xlabel('Time (ms)')
+    plt.ylabel('Activity')
+    plt.legend(loc='best')
+    plt.show()
 
+def phase_activity_snapshot(time_idx):
+    plt.figure(figsize=(8, 5.5))
+    
+    plt.subplot(211)
+    plt.plot(params['time_vec'], exc_activity, color='blue', label=r'$r_E$')
+    plt.plot(params['time_vec'], inh_activity, color='red', label=r'$r_I$')
+    plt.plot(params['time_vec'][time_idx], exc_activity[time_idx], marker='o', color='blue')
+    plt.plot(params['time_vec'][time_idx], inh_activity[time_idx], marker='o', color='red')
+    plt.axvline(params['time_vec'][time_idx], 0, 1, color='black', linestyle='--')
+    plt.xlabel('Time (ms)', fontsize=14)
+    plt.ylabel('Activity', fontsize=14)
+    plt.legend(loc='best', fontsize=14)
+    
+    plt.subplot(212)
+    plt.plot(exc_activity, inh_activity, color='black')
+    plt.plot(exc_activity[time_idx], inh_activity[time_idx], marker='o', color='black')
+    plt.xlabel(r'$r_E$', fontsize=18, color='blue')
+    plt.ylabel(r'$r_I$', fontsize=18, color='red')
+    
+    plt.tight_layout()
+    plt.show()
 
-def plot_fp(x_fp, position=(0.02, 0.1), rotation=0):
-  plt.plot(x_fp[0], x_fp[1], 'ko', ms=8)
-  plt.text(x_fp[0] + position[0], x_fp[1] + position[1],
-           f'Fixed Point1=\n({x_fp[0]:.3f}, {x_fp[1]:.3f})',
-           horizontalalignment='center', verticalalignment='bottom',
-           rotation=rotation)
-  
+def generate_fi_curves():
+    params = get_standard_parameters()
+    input_vals = np.arange(0, 10, 0.1)
+    
+    print(params['a_E'], params['theta_E'])
+    print(params['a_I'], params['theta_I'])
+    
+    exc_fi = sigmoid_activation(input_vals, params['a_E'], params['theta_E'])
+    inh_fi = sigmoid_activation(input_vals, params['a_I'], params['theta_I'])
+    
+    with plt.xkcd():
+        visualize_ei_curves(input_vals, exc_fi, inh_fi)
 
-def default_pars(**kwargs):
-  pars = {}
-  pars['tau_E'] = 1.     # Timescale of the E population [ms]
-  pars['a_E'] = 1.2      # Gain of the E population
-  pars['theta_E'] = 2.8  # Threshold of the E population
-  pars['tau_I'] = 2.0    # Timescale of the I population [ms]
-  pars['a_I'] = 1.0      # Gain of the I population
-  pars['theta_I'] = 4.0  # Threshold of the I population
-  pars['wEE'] = 9.   # E to E
-  pars['wEI'] = 4.   # I to E
-  pars['wIE'] = 13.  # E to I
-  pars['wII'] = 11.  # I to I
-  pars['I_ext_E'] = 0.
-  pars['I_ext_I'] = 0.
-  pars['T'] = 50.        # Total duration of simulation [ms]
-  pars['dt'] = .1        # Simulation time step [ms]
-  pars['rE_init'] = 0.2  # Initial value of E
-  pars['rI_init'] = 0.2  # Initial value of I
-  for k in kwargs:
-      pars[k] = kwargs[k]
-  # Vector of discretized time points [ms]
-  pars['range_t'] = np.arange(0, pars['T'], pars['dt'])
-  return pars
+def compute_ei_derivatives(exc_rates, inh_rates, tau_e, a_e, theta_e, wee, wei, i_ext_e, tau_i, a_i, theta_i, wie, wii, i_ext_i, **ignored):
+    d_exc_dt = (-exc_rates + sigmoid_activation(wee * exc_rates - wei * inh_rates + i_ext_e, a_e, theta_e)) / tau_e
+    d_inh_dt = (-inh_rates + sigmoid_activation(wie * exc_rates - wii * inh_rates + i_ext_i, a_i, theta_i)) / tau_i
+    return d_exc_dt, d_inh_dt
 
+def compute_e_nullcline(exc_vals, tau_e, a_e, theta_e, wee, wei, i_ext_e, tau_i, a_i, theta_i, wie, wii, i_ext_i, **ignored):
+    input_to_e = wee * exc_vals + i_ext_e
+    f_inv_e = inverse_transfer(exc_vals * tau_e, a_e, theta_e)  # Placeholder; adjust if needed
+    return (input_to_e - f_inv_e) / wei
 
-def F(x, a, theta):
-  f = (1 + np.exp(-a * (x - theta)))**-1 - (1 + np.exp(a * theta))**-1
-  return f
+def compute_i_nullcline(inh_vals, tau_e, a_e, theta_e, wee, wei, i_ext_e, tau_i, a_i, theta_i, wie, wii, i_ext_i, **ignored):
+    input_to_i = -wii * inh_vals + i_ext_i
+    f_inv_i = inverse_transfer(inh_vals * tau_i, a_i, theta_i)
+    return (f_inv_i - input_to_i) / wie  
 
-
-def dF(x, a, theta):
-  dFdx = a * np.exp(-a * (x - theta)) * (1 + np.exp(-a * (x - theta)))**-2
-  return dFdx
-
-
-class PlayVideo(IFrame):
-  def __init__(self, id, source, page=1, width=400, height=300, **kwargs):
-    self.id = id
-    if source == 'Bilibili':
-      src = f'https://player.bilibili.com/player.html?bvid={id}&page={page}'
-    elif source == 'Osf':
-      src = f'https://mfr.ca-1.osf.io/render?url=https://osf.io/download/{id}/?direct%26mode=render'
-    super(PlayVideo, self).__init__(src, width, height, **kwargs)
-
-
-def display_videos(video_ids, W=400, H=300, fs=1):
-  tab_contents = []
-  for i, video_id in enumerate(video_ids):
-    out = widgets.Output()
-    with out:
-      if video_ids[i][0] == 'Youtube':
-        video = YouTubeVideo(id=video_ids[i][1], width=W,
-                             height=H, fs=fs, rel=0)
-        print(f'Video available at https://youtube.com/watch?v={video.id}')
-      else:
-        video = PlayVideo(id=video_ids[i][1], source=video_ids[i][0], width=W,
-                          height=H, fs=fs, autoplay=False)
-        if video_ids[i][0] == 'Bilibili':
-          print(f'Video available at https://www.bilibili.com/video/{video.id}')
-        elif video_ids[i][0] == 'Osf':
-          print(f'Video available at https://osf.io/{video.id}')
-      display(video)
-    tab_contents.append(out)
-  return tab_contents
-
-
-def simulate_wc(tau_E, a_E, theta_E, tau_I, a_I, theta_I, wEE, wEI, wIE, wII, I_ext_E, I_ext_I, rE_init, rI_init, dt, range_t, **other_pars):
-  Lt = range_t.size
-  rE = np.append(rE_init, np.zeros(Lt - 1))
-  rI = np.append(rI_init, np.zeros(Lt - 1))
-  I_ext_E = I_ext_E * np.ones(Lt)
-  I_ext_I = I_ext_I * np.ones(Lt)
-  for k in range(Lt - 1):
-    drE = dt / tau_E * (-rE[k] + F(wEE * rE[k] - wEI * rI[k] + I_ext_E[k], a_E, theta_E))
-    drI = dt / tau_I * (-rI[k] + F(wIE * rE[k] - wII * rI[k] + I_ext_I[k], a_I, theta_I))
-    rE[k + 1] = rE[k] + drE
-    rI[k + 1] = rI[k] + drI
-  return rE, rI
-
-
-def plot_EI_diffinitial(rE_init=0.0):
-  pars = default_pars(rE_init=rE_init, rI_init=.15)
-  rE, rI = simulate_wc(**pars)
-  plt.figure()
-  plt.plot(pars['range_t'], rE, 'b', label='E population')
-  plt.plot(pars['range_t'], rI, 'r', label='I population')
-  plt.xlabel('t (ms)')
-  plt.ylabel('Activity')
-  plt.legend(loc='best')
-  plt.show()
-
-
-def plot_activity_phase(n_t):
-  plt.figure(figsize=(8, 5.5))
-  plt.subplot(211)
-  plt.plot(pars['range_t'], rE, 'b', label=r'$r_E$')
-  plt.plot(pars['range_t'], rI, 'r', label=r'$r_I$')
-  plt.plot(pars['range_t'][n_t], rE[n_t], 'bo')
-  plt.plot(pars['range_t'][n_t], rI[n_t], 'ro')
-  plt.axvline(pars['range_t'][n_t], 0, 1, color='k', ls='--')
-  plt.xlabel('t (ms)', fontsize=14)
-  plt.ylabel('Activity', fontsize=14)
-  plt.legend(loc='best', fontsize=14)
-  plt.subplot(212)
-  plt.plot(rE, rI, 'k')
-  plt.plot(rE[n_t], rI[n_t], 'ko')
-  plt.xlabel(r'$r_E$', fontsize=18, color='b')
-  plt.ylabel(r'$r_I$', fontsize=18, color='r')
-  plt.tight_layout()
-  plt.show()
-
-
-def FIcurve():
-  pars = default_pars()
-  x = np.arange(0, 10, .1)
-  print(pars['a_E'], pars['theta_E'])
-  print(pars['a_I'], pars['theta_I'])
-  # Compute the F-I curve of the excitatory population
-  FI_exc = F(x, pars['a_E'], pars['theta_E'])
-  # Compute the F-I curve of the inhibitory population
-  FI_inh = F(x, pars['a_I'], pars['theta_I'])
-  # Visualize
-  with plt.xkcd():
-    plot_FI_EI(x, FI_exc, FI_inh)
-
-
-def EIderivs(rE, rI, tau_E, a_E, theta_E, wEE, wEI, I_ext_E, tau_I, a_I, theta_I, wIE, wII, I_ext_I, **other_pars):
-  drEdt = (-rE + F(wEE * rE - wEI * rI + I_ext_E, a_E, theta_E)) / tau_E
-  drIdt = (-rI + F(wIE * rE - wII * rI + I_ext_I, a_I, theta_I)) / tau_I
-  return drEdt, drIdt
+def inverse_transfer(output_val, gain, threshold):
+    return (1/gain) * np.log( (1 / (output_val + 1 / (1 + np.exp(gain * threshold)))) - 1 ) + threshold
