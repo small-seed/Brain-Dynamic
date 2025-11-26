@@ -8,9 +8,4 @@ The purpose of this repository is **purely educational**.
 All code is **written by me from scratch** as a way to understand and practice
 the material.  
 
-No text, code, figures, or proprietary materials from the book or the course
-are copied into this repository. Only high-level scientific concepts (e.g.,
-LIF models, differential equations, neural dynamics) are implemented in my own
-words and code.
-
 This repository is **not affiliated with the authors or EPFL**.
